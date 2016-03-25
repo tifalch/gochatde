@@ -6,7 +6,20 @@ import (
 )
 
 func TestIPs(t *testing.T) {
-	fmt.Println("start ip testing")
-	fmt.Println(toIP("127.0.0.1"))
-	fmt.Println(toIP("127.0.0.1:9999"))
+	for _, v := range []string{"127.0.0.1", "127.0.0.1:9999"} {
+		_, err := toIP(v)
+		if err != nil {
+			t.Fail()
+			fmt.Println("failed at", v)
+		}
+	}
+	for _, v := range []string{"asdb", "192", "....:", "......", ":", ".."} {
+		_, err := toIP(v)
+		if err == nil {
+			t.Fail()
+			fmt.Println("validated", v, "... should have failed")
+		}
+	}
 }
+
+// Test if Valid

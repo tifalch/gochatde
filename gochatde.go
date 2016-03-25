@@ -13,18 +13,19 @@ import (
 )
 
 var (
-	port  = 15327
+	port  = int16(15327)
 	hello = `Welcome to gochatde
 an encrypted terminal chat client using delta-l encryption.`
 
 	notarget = fmt.Sprintf("%s %d", `You need to tell gochatde an ip[:port] to connect to
 the default port is`, port)
-	useColor = flag.Bool("color", false, "use color")
+	useColor    = flag.Bool("color", false, "use color")
+	useCompress = flag.Bool("gzip", false, "use compression")
+	useChecksum = flag.Bool("check", true, "use checksum")
 )
 
 func main() {
 	flag.Parse()
-	fmt.Println(*useColor)
 	args := flag.Args()
 	failed := !(len(args) >= 1)
 	wg := new(sync.WaitGroup)
@@ -78,7 +79,7 @@ chatfor:
 			break chatfor
 		default:
 			setColor(green)
-			fmt.Print(" > ")
+			fmt.Print(" Δ ")
 			var msg []byte
 			msg, more, err := buf.ReadLine()
 			resetColor()
@@ -109,9 +110,15 @@ chatfor:
 
 func send(message, password string) error {
 	msgBuffer := NewMessageBuffer(message)
-	reader, err := deltal.NewEncoderReader(msgBuffer, password, true)
+	var reader *deltal.Encoder
+	var err error
+	if *useCompress {
+		reader, err = deltal.NewCompressedEncoderReader(msgBuffer, password, *useChecksum)
+	} else {
+		reader, err = deltal.NewEncoderReader(msgBuffer, password, *useChecksum)
+	}
 	setColor(cyan)
-	fmt.Println("--- begins encrypted data ---")
+	fmt.Println("--- begins compressed enrypted data ---")
 	var data []byte
 	b := make([]byte, 12)
 	for i := 1; true; i++ {
@@ -122,7 +129,7 @@ func send(message, password string) error {
 			break
 		}
 	}
-	fmt.Println("--- end of encrypted data ---")
+	fmt.Println("--- end of compressed enrypted data ---")
 	resetColor()
 	return err
 }

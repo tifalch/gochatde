@@ -31,8 +31,11 @@ func toIP(s string) (IP, error) {
 	spl := strings.Split(s+":", ":")
 	ins, err := splitIPstring(spl[0])
 	p, _ := strconv.ParseInt(spl[1], 10, 16)
-	port := int16(p)
-	return &IPv4{ins, port}, err
+	iport := int16(p)
+	if iport < 1000 {
+		iport = port
+	}
+	return &IPv4{ins, iport}, err
 }
 
 func splitIPstring(s string) ([]byte, error) {
