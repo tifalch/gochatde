@@ -244,6 +244,7 @@ func handleCommand(cmd string) error {
 		return nil
 	case "cd":
 		fmt.Println("Usage: §cd <dir>")
+		return nil
 	case "pwd":
 		pwd, err := os.Getwd()
 		if err != nil {
@@ -251,6 +252,7 @@ func handleCommand(cmd string) error {
 		} else {
 			fmt.Println(pwd)
 		}
+		return nil
 	} // end single word cmds
 	if cmdpart := strings.Fields(cmd); len(cmdpart) > 1 { // begin multi word cmds
 		switch cmdpart[0] {
