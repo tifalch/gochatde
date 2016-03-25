@@ -112,13 +112,14 @@ func send(message, password string) error {
 	msgBuffer := NewMessageBuffer(message)
 	var reader *deltal.Encoder
 	var err error
+	setColor(cyan)
 	if *useCompress {
 		reader, err = deltal.NewCompressedEncoderReader(msgBuffer, password, *useChecksum)
+		fmt.Println("--- begins compressed enrypted data ---")
 	} else {
 		reader, err = deltal.NewEncoderReader(msgBuffer, password, *useChecksum)
+		fmt.Println("--- begins enrypted data ---")
 	}
-	setColor(cyan)
-	fmt.Println("--- begins compressed enrypted data ---")
 	var data []byte
 	b := make([]byte, 12)
 	for i := 1; true; i++ {
@@ -129,7 +130,11 @@ func send(message, password string) error {
 			break
 		}
 	}
-	fmt.Println("--- end of compressed enrypted data ---")
+	if *useCompress {
+		fmt.Println("--- end of compressed enrypted data ---")
+	} else {
+		fmt.Println("--- begins enrypted data ---")
+	}
 	resetColor()
 	return err
 }
