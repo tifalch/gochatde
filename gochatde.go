@@ -35,6 +35,7 @@ Usage:
 )
 
 func main() {
+	flag.BoolVar(useColor, "colour", false, "use color")
 	flag.Parse()
 	flagPrint()
 	args := flag.Args()
