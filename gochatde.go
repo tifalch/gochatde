@@ -89,6 +89,8 @@ chatfor:
 					} else {
 						defer func() { osreturn <- 2 }()
 					}
+				default:
+					defer func() { osreturn <- 2 }()
 				}
 				break chatfor
 			}
@@ -254,7 +256,8 @@ func handleCommand(cmd string) error {
 		case file:
 			data, err := ioutil.ReadFile(cmdpart[1])
 			if err != nil {
-				return err
+				fmt.Println(err)
+				return nil
 			}
 			return datasend(string(data))
 		case "cd":
