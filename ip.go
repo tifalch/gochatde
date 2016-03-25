@@ -24,7 +24,11 @@ func (i IPv4) String() string {
 
 // Valid checks if IP has valid form
 func (i IPv4) Valid() (bool, error) {
-	return true, nil
+	var sum byte
+	for _, v := range i.Adress {
+		sum += v
+	}
+	return sum != 0, nil
 }
 
 func toIP(s string) (IP, error) {

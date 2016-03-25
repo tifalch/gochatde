@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/mtib/godolta/deltal"
 	"io"
+	"io/ioutil"
 	"os"
 	"os/signal"
 	"strings"
@@ -17,53 +18,62 @@ var (
 	hello = `Welcome to gochatde
 an encrypted terminal chat client using delta-l encryption.`
 
-	notarget = fmt.Sprintf("%s %d", `You need to tell gochatde an ip[:port] to connect to
-the default port is`, port)
-	useColor    = flag.Bool("color", false, "use color")
-	useCompress = flag.Bool("gzip", false, "use compression")
-	useChecksum = flag.Bool("check", true, "use checksum")
+	notarget = fmt.Sprintf(`You need to tell gochatde an ip[:port] to connect to
+the default port is %d
+
+Usage:
+	gochatde [-color -gzip] IP
+	gochatde [-color -gzip -check=false] IP:PORT
+`, port)
+	useColor      = flag.Bool("color", false, "use color")
+	useCompress   = flag.Bool("gzip", false, "use compression")
+	useChecksum   = flag.Bool("check", true, "use checksum")
+	debug         = flag.Bool("debug", false, "run in debug mode")
+	chatWaitgroup = new(sync.WaitGroup)
+	datasend      func(string) error
+	osreturn      = make(chan int)
 )
 
 func main() {
 	flag.Parse()
+	flagPrint()
 	args := flag.Args()
-	failed := !(len(args) >= 1)
-	wg := new(sync.WaitGroup)
-	if !failed {
-		ip, err := toIP(args[0])
-		if err != nil {
-			failed = true
-			fmt.Println(err)
-			goto fail
-		}
-		b, e := ip.Valid()
-		if b == true && e == nil {
-			// chatmode
+	if len(args) == 1 { // IP:PORT and Password
+		if ip, err := toIP(args[0]); err != nil { // could read IP:PORT
+			print(ip, "\n")
 			fmt.Println(hello)
-			wg.Add(1)
+			// read password
+			password := enterPassword() // just for now
+			chatWaitgroup.Add(1)        // enter chatmode
 			if len(args) == 1 {
-				go chatmode(wg, "")
+				go chatmode(ip, password) // without password
 			} else {
-				go chatmode(wg, args[1])
+				go chatmode(ip, password) // with password
 			}
+			go receive(ip, password)
+			chatWaitgroup.Wait()
+			os.Exit(<-osreturn)
 		} else {
-			failed = true
+			fmt.Println(err)
 		}
 	}
-fail:
-	if failed {
-		fmt.Println(notarget)
-	} else {
-		wg.Wait()
-	}
+	// Something went wrong
+	setColor(red)
+	fmt.Println(notarget)
+	flag.PrintDefaults()
+	resetColor()
+	os.Exit(1)
 }
 
-func chatmode(wg *sync.WaitGroup, pass string) {
+func chatmode(ip IP, pass string) {
 	csig := make(chan os.Signal, 10)
 	cerr := make(chan error, 10)
 	signal.Notify(csig, os.Kill, os.Interrupt)
 	// make connection
 	buf := bufio.NewReader(os.Stdin)
+	datasend = func(s string) error {
+		return send(s, pass)
+	}
 chatfor:
 	for {
 		select {
@@ -72,10 +82,19 @@ chatfor:
 				setColor(red)
 				fmt.Println(err)
 				resetColor()
+				switch err.(type) {
+				case CommandError:
+					if int(err.(CommandError)) == 201 {
+						defer func() { osreturn <- 0 }()
+					} else {
+						defer func() { osreturn <- 2 }()
+					}
+				}
 				break chatfor
 			}
 		case <-csig:
 			// send "bye"
+			defer func() { osreturn <- 0 }()
 			break chatfor
 		default:
 			setColor(green)
@@ -105,7 +124,7 @@ chatfor:
 			cerr <- err2
 		}
 	}
-	wg.Done()
+	chatWaitgroup.Done()
 }
 
 func send(message, password string) error {
@@ -115,31 +134,32 @@ func send(message, password string) error {
 	setColor(cyan)
 	if *useCompress {
 		reader, err = deltal.NewCompressedEncoderReader(msgBuffer, password, *useChecksum)
-		fmt.Println("--- begins compressed enrypted data ---")
+		print("--- begins compressed enrypted data ---\n")
 	} else {
 		reader, err = deltal.NewEncoderReader(msgBuffer, password, *useChecksum)
-		fmt.Println("--- begins enrypted data ---")
+		print("--- begins enrypted data ---\n")
 	}
 	var data []byte
 	b := make([]byte, 12)
 	for i := 1; true; i++ {
 		n, err2 := reader.Read(b)
-		fmt.Printf("[%02X] (%02d) %s\n", i, n, toString(b))
-		data = append(data, b...)
+		printf("[%02X] (%02d) %s\n", i, n, toString(b, n))
+		data = append(data, b[:n]...)
 		if err2 != nil {
 			break
 		}
 	}
+	print("len(data) == ", len(data), " bytes\n")
 	if *useCompress {
-		fmt.Println("--- end of compressed enrypted data ---")
+		print("--- end of compressed enrypted data ---\n")
 	} else {
-		fmt.Println("--- begins enrypted data ---")
+		print("--- end of enrypted data ---\n")
 	}
 	resetColor()
 	return err
 }
 
-func toString(b []byte) string {
+func toString(b []byte, read int) string {
 	s := "["
 	n := 1
 	if b[0] == 0xCE && b[1] == 0x94 && b[2] == 0x4C && b[3] == 0xA {
@@ -147,8 +167,12 @@ func toString(b []byte) string {
 		n = 5
 	}
 	s += fmt.Sprintf("%02X", b[n-1])
-	for _, v := range b[n:] {
-		s = fmt.Sprintf("%s %02X", s, v)
+	for k, v := range b[n:] {
+		r := ' '
+		if n+k == read {
+			r = '|'
+		}
+		s = fmt.Sprintf("%s%c%02X", s, r, v)
 	}
 	return s + "]"
 }
@@ -167,13 +191,82 @@ func (c CommandError) Error() string {
 	}
 }
 
+var commandpairs = map[string]string{
+	"§bye, §quit":  "end gochatde",
+	"§file <file>": "send file",
+	"§ls":          "list files current directory",
+	"§pwd":         "prints current working directory",
+	"§cd <dir>":    "changes directory",
+}
+
 func handleCommand(cmd string) error {
+	file := "file"
 	setColor(cyan)
 	cmd = strings.TrimSpace(cmd)
-	switch {
-	case cmd == "bye", cmd == "quit":
+	switch cmd { // switch all cmds (but handle only single word ones)
+	case "bye", "quit":
 		return CommandError(201)
-	}
+	case "help", "?":
+		for cmd, expl := range commandpairs {
+			fmt.Printf("%s\n\t%s\n", cmd, expl)
+		}
+		return nil
+	case file:
+		return handleCommand("help")
+	case "ls":
+		info, err := ioutil.ReadDir(".")
+		if err != nil {
+			fmt.Println(err)
+			return nil
+		}
+		var max struct{ Name, Size int }
+		for _, f := range info {
+			name := len(f.Name())
+			size := len(fmt.Sprintf("%d", f.Size))
+			if name > max.Name {
+				max.Name = name
+			}
+			if size > max.Size {
+				max.Size = size
+			}
+		}
+		format := fmt.Sprintf("%%-%ds %%%dd %%s\n", max.Name, max.Size)
+		for _, f := range info {
+			if f.IsDir() {
+				file = "dir"
+			}
+			fmt.Printf(format, f.Name(), f.Size(), file)
+			file = "file"
+		}
+		return nil
+	case "cd":
+		fmt.Println("Usage: §cd <dir>")
+	case "pwd":
+		pwd, err := os.Getwd()
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			fmt.Println(pwd)
+		}
+	} // end single word cmds
+	if cmdpart := strings.Fields(cmd); len(cmdpart) > 1 { // begin multi word cmds
+		switch cmdpart[0] {
+		case file:
+			data, err := ioutil.ReadFile(cmdpart[1])
+			if err != nil {
+				return err
+			}
+			return datasend(string(data))
+		case "cd":
+			err := os.Chdir(cmdpart[1])
+			if err != nil {
+				fmt.Println("directory", cmdpart[1], "was not found.")
+			} else {
+				fmt.Println("switched directory")
+			}
+			return nil
+		}
+	} // end multi word cmd
 	setColor(red)
 	fmt.Println("unknown command")
 	resetColor()
