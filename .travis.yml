@@ -6,7 +6,5 @@ go:
     - 1.6
 git:
     depth: 3
-install:
-    - go get ./...
 script:
     - go test -v ./...
