@@ -7,6 +7,7 @@ import (
 	"github.com/mtib/godolta/deltal"
 	"io"
 	"io/ioutil"
+	"net"
 	"os"
 	"os/signal"
 	"strings"
@@ -40,7 +41,8 @@ func main() {
 	flagPrint()
 	args := flag.Args()
 	if len(args) == 1 { // IP:PORT and Password
-		if ip, err := toIP(args[0]); err != nil { // could read IP:PORT
+		ip, err := net.ResolveIPAddr("ip4", args[0])
+		if err == nil { // could read IP:PORT
 			print(ip, "\n")
 			fmt.Println(hello)
 			// read password
@@ -55,6 +57,7 @@ func main() {
 			chatWaitgroup.Wait()
 			os.Exit(<-osreturn)
 		} else {
+			fmt.Println("could not parse the ip", args[0])
 			fmt.Println(err)
 		}
 	}
@@ -66,7 +69,7 @@ func main() {
 	os.Exit(1)
 }
 
-func chatmode(ip IP, pass string) {
+func chatmode(ip *net.IPAddr, pass string) {
 	csig := make(chan os.Signal, 10)
 	cerr := make(chan error, 10)
 	signal.Notify(csig, os.Kill, os.Interrupt)

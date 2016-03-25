@@ -2,11 +2,11 @@ package main
 
 import (
 	_ "github.com/mtib/godolta/deltal"
-	_ "net"
+	"net"
 	"time"
 )
 
-func receive(ip IP, password string) {
+func receive(ip *net.IPAddr, password string) {
 	// printf("start receiving from %v", ip)
 	for {
 		select {
